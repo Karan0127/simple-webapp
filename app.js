@@ -30,6 +30,11 @@ app.get('/',function(req,res){
     res.sendFile(pathToSignup);
 });
 
+app.get('/login',function(req,res){
+    const pathToSignup = path.join(__dirname, '/views/login.html');
+    res.sendFile(pathToSignup);
+});
+
 
 app.post('/users', (req, res) => {
     const user = new User({
