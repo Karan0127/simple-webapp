@@ -22,101 +22,190 @@ app.use(bodyParser.json());
 //const router = express.Router();
 const User = require('./model/User.js'); 
 const bcrypt = require('bcrypt');
-
 const path = require('path');
-app.get('/',function(req,res){
-    const pathToSignup = path.join(__dirname, '/views/signup.html');
-    //console.log(pathToSignup);
-    res.sendFile(pathToSignup);
+
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
+const { v4: uuid } = require('uuid');
+
+app.use(session({
+    genid: (req) => {
+    return uuid() // use UUIDs for session IDs
+    },
+    store: new FileStore(),
+    secret: 'any key is fine',
+    resave: false,
+    saveUninitialized: true
+}));
+
+//passport.use(User.createStrategy());
+  
+// Serializing and deserializing
+// passport.serializeUser(User.serializeUser());
+// passport.deserializeUser(User.deserializeUser());
+
+const customFields = {
+    usernameField: 'userName',
+    passwordField: 'password'
+};
+//done represents function that you will the results of authentication to
+const verifyCallback = (username, password, done) => {
+    User.findOne({username: username})
+        .then((user) => {
+            if(!user) {return done(null, false)};
+
+            let passwordCheck = bcrypt.compareSync(password, user.password);
+
+            if(username === user.username && passwordCheck) {
+                return done(null, user)
+            }
+            else{
+                return done(null, false);
+            }
+        })
+        .catch(err => {done(err)});
+}
+const strategy = new LocalStrategy(customFields, verifyCallback);
+passport.use(strategy);
+
+//for user to go into the session
+passport.serializeUser((user, done) => {done(null, user.id);});
+
+//for user to come out of the session 
+passport.deserializeUser(async (id, done) => {
+        User.findById(id)
+            .then(user => {
+                done(null, user);
+            })
+            .catch(err => done(err));
+});
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.get('/',async function(req,res){
+    if(req.isAuthenticated()) {
+        res.send('You have already logged in. No need to signup again');  
+    }
+    else{
+        const pathToSignup = path.join(__dirname, '/views/welcome.html');
+        res.sendFile(pathToSignup);
+    }
+});
+
+app.get('/register',async function(req,res){
+    if(req.isAuthenticated()) {
+        res.send('You have already logged in. No need to signup again');  
+    }
+    else{
+        const pathToSignup = path.join(__dirname, '/views/signup.html');
+        res.sendFile(pathToSignup);
+    }
 });
 
 app.get('/login',function(req,res){
-    const pathToSignup = path.join(__dirname, '/views/login.html');
-    res.sendFile(pathToSignup);
+    // if(req.isAuthenticated()) {
+    //     res.send('You have already logged in. No need to login again');
+    // }
+    // else{
+        const pathToSignup = path.join(__dirname, '/views/login.html');
+        res.sendFile(pathToSignup);
+    //}
 });
 
 
-app.post('/users', (req, res) => {
+app.post('/register', (req, res, next) => {
     const user = new User({
-        firstName : req.body.firstName,
-        lastName : req.body.lastName,
-        userName : req.body.userName,
-        password : req.body.password,
-        email : req.body.email
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        username: req.body.userName,
+        password: req.body.password,
+        email: req.body.email
     });
+    
     bcrypt.hash(user.password, 10, function(err, hash){
         if(err){
-            return next(err);
+            console.log(err);
+            return res.status(500).send('Internal Server Error');
         }
         user.password = hash;
         user.save()
-        .then(data => {console.log('Successfully created a new User');})
-        .catch(error => {console.log('Error');})
-    })
-    //res.json({message: "successfully signed up"});
-    res.redirect('/users');
+        .then(data => {
+            console.log('Successfully created a new User');
+            passport.authenticate('local')(req, res, function() {
+               //res.status(201).send('Successfully created a new User');
+               res.redirect('/login');
+            });
+            
+        })
+        .catch(error => {
+            console.log(error);
+            res.status(500).send('Internal Server Error');
+        });
+        
+    });
 });
-
 
 const ejs = require('ejs');
 app.set('view engine', 'ejs');
 app.get('/users', async (req, res) => {
-    let result = await User.find();
-    if (result) { 
-        res.render('availableUsers', {'users' : result});
+    if (req.isAuthenticated()) {
+        let result = await User.find();
+        if (result) { 
+            res.render('availableUsers', {'users' : result});
+        } else {
+            res.status(404);
+        }
     } else {
-        res.status(404);
-    }
-   
+        res.send('<h1>You are not authenticated</h1><p><a href="/login">Login</a></p>');
+    }  
 })
 
-const passport = require('passport');
-var LocalStrategy = require('passport-local').Strategy;
+app.post('/login', passport.authenticate('local', {failureRedirect: '/login-failure', successRedirect: '/login-success'}));
+    //(req, res, next) => {
 
-app.use(passport.initialize());
-app.use(passport.session());
-passport.use(new LocalStrategy(
-    { usernameField: 'userName' },
-    (userName, password, done) => {
-       User.findOne({userName: userName}, (err, userData) => {
-       let passwordCheck = bcrypt.compareSync(password,   userData.password);
- if(userName === userData.userName && passwordCheck) {
-     return done(null, userData)
-    }
-   })
- }
- ));
- app.post('/login', (req, res, next) => {
- passport.authenticate('local', (err, user, info) => {
-      req.login(user, (err) => {
-      // Write code to redirect to any html page.
-      res.redirect('/index');
-      })
-    })
- });
+    //passport.authenticate('local', (err, user, info) => {
+    //     if (err) {
+    //         // handle error
+    //         console.error(err);
+    //         return next(err);
+    //     }
+    //     if (!user) {
+    //         // handle authentication failure
+    //         //console.log('The user is - ');
+    //         //console.log(user);
+    //         return res.status(401).send('Invalid username or password');
+    //     }
+    //     req.login(user, (err) => {
+    //         if (err) {
+    //             // handle error
+    //             console.error(err);
+    //             return next(err);
+    //         }
+    //         // authentication succeeded
+    //         console.log('Authentication succeeded');
+    //         return res.send('Login successful');
+    //     });
+    // })(req, res, next);  
+    // }
+//);
 
-// const session = require('express-session');
-// const FileStore = require('session-file-store')(session);
-// const { v4: uuid } = require('uuid');
-// app.use(session({
-//    genid: (req) => {
-//    return uuid() // use UUIDs for session IDs
-//    },
-//    store: new FileStore(),
-//    secret: 'any key is fine',
-//    resave: false,
-//    saveUninitialized: true
-// }))
-// passport.serializeUser((user, done) => {
-//     done(null, user.id);
-// });
-// passport.deserializeUser(function(id, done) {
-// User.findById(id, function(err, user) { 
-//     loggedInUser = user;
-//     done(err, user);
-// });
-// });
+app.get('/login-success', (req, res, next) => {
+    res.send('<p>You successfully logged in. --> <a href="/users">See all users</a></p>');
+});
 
+
+app.get('/logout', (req, res, next) => {
+    req.logout(err => {console.log(err)});
+    res.redirect('/login');
+});
+
+app.get('/login-failure', (req, res, next) => {
+    res.send('You entered the wrong password.');
+});
 
 app.listen(3000, () => {
     console.log('Server listening on 3000');

@@ -3,19 +3,24 @@
 <title>Login</title>
 </head>
 <body>
-<div>
+<div class="element1"> 
      <form action="/login" method="post">
-     <span>Sign In</span>
+     <h3>Sign In</h3>
      <div data-validate="Please enter username">
      <input type="text" name="userName" placeholder="Username">
+     </div>
+     <div data-validate = "Please enter password">
+          <input type="password" name="password" placeholder="Password">
+     </div>
+     <div>
+          <button>Sign in</button>
+     </div>
+     </form>
 </div>
-<div data-validate = "Please enter password">
-     <input type="password" name="password" placeholder="Password">
-</div>
-<div>
-     <button>Sign in</button>
-</div>
-</form>
+<div class="element2">
+     <form action="/" method="get">
+          <button>Back to Welcome page</button>
+     </form>
 </div>
 </body>
 </html>

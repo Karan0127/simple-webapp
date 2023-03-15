@@ -7,7 +7,7 @@ router.post('/user', (req, res) => {
     const user = new User({
         firstName : req.body.firstName,
         lastName : req.body.lastName,
-        userName : req.body.userName,
+        username : req.body.userName,
         password : req.body.password,
         email : req.body.email
     });
